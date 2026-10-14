@@ -13,14 +13,29 @@ function isStaticAsset(pathname: string) {
   );
 }
 
+function externalUrl(request: NextRequest, pathname: string) {
+  const host = (
+    request.headers.get("x-forwarded-host") ??
+    request.headers.get("host") ??
+    request.nextUrl.host
+  )
+    .split(",")[0]
+    .trim();
+  const proto =
+    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
+    request.nextUrl.protocol.replace(":", "");
+  return new URL(pathname, `${proto}://${host}`);
+}
+
 function redirectToLogin(request: NextRequest, reason: string) {
-  const url = request.nextUrl.clone();
-  url.pathname = "/login";
+  const url = externalUrl(request, "/login");
   url.searchParams.set("reason", reason);
   const res = NextResponse.redirect(url);
   res.cookies.set(SESSION_COOKIE, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() === "https" ||
+      process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 0,
@@ -106,7 +121,7 @@ export async function proxy(request: NextRequest) {
     if (!token) return NextResponse.next();
     const auth = await resolveAuth(token);
     if ("user" in auth) {
-      return NextResponse.redirect(new URL("/feed", request.url));
+      return NextResponse.redirect(externalUrl(request, "/feed"));
     }
     return NextResponse.next();
   }
@@ -155,12 +170,12 @@ export async function proxy(request: NextRequest) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
-      return NextResponse.redirect(new URL("/feed", request.url));
+      return NextResponse.redirect(externalUrl(request, "/feed"));
     }
   }
 
   if (pathname === "/") {
-    return NextResponse.redirect(new URL("/feed", request.url));
+    return NextResponse.redirect(externalUrl(request, "/feed"));
   }
 
   const requestHeaders = new Headers(request.headers);

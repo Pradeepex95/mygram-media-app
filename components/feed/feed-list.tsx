@@ -4,9 +4,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PostCard, type FeedPost } from "@/components/feed/post-card";
+import { StoryBar } from "@/components/feed/story-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function FeedList({ currentUserId }: { currentUserId: string }) {
+export function FeedList({
+  currentUserId,
+  username,
+  canUpload,
+  appName,
+}: {
+  currentUserId: string;
+  username: string;
+  canUpload: boolean;
+  appName: string;
+}) {
   const router = useRouter();
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -75,14 +86,25 @@ export function FeedList({ currentUserId }: { currentUserId: string }) {
 
   if (!posts.length) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center text-zinc-500 dark:border-zinc-800">
-        No posts yet. Be the first to share something.
+      <div className="-mx-3 bg-black text-white md:mx-0 md:rounded-xl md:border md:border-zinc-800">
+        <div className="border-b border-zinc-800 px-3 py-3 text-center font-serif text-2xl">
+          {appName}
+        </div>
+        <StoryBar username={username} canUpload={canUpload} />
+        <p className="px-6 py-16 text-center text-sm text-zinc-500">
+          No posts yet. A new photo also appears in status for 24 hours.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="-mx-3 bg-black text-white md:mx-0 md:overflow-hidden md:rounded-xl md:border md:border-zinc-800">
+      <div className="sticky top-0 z-20 flex items-center justify-center border-b border-zinc-800 bg-black px-3 py-3 md:static">
+        <h1 className="font-serif text-2xl tracking-tight">{appName}</h1>
+      </div>
+      <StoryBar username={username} canUpload={canUpload} />
+      <div>
       {posts.map((post) => (
         <PostCard
           key={post.id}
@@ -93,6 +115,7 @@ export function FeedList({ currentUserId }: { currentUserId: string }) {
       ))}
       <div ref={sentinelRef} className="h-8" />
       {loadingMore && <Skeleton className="h-24 w-full" />}
+      </div>
     </div>
   );
 }

@@ -33,6 +33,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Fully authenticated / cookie-gated app: keep routes request-dynamic.
   cacheComponents: false,
+  allowedDevOrigins: ["*.trycloudflare.com"],
   output: "standalone",
   poweredByHeader: false,
   async headers() {

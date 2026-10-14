@@ -6,14 +6,27 @@ export function assertSameOrigin(request: Request) {
   }
 
   const origin = request.headers.get("origin");
-  const appUrl = getEnv().NEXT_PUBLIC_APP_URL;
   if (!origin) {
     // Non-browser clients (curl, cron) may omit Origin
     return;
   }
 
-  const allowed = new URL(appUrl).origin;
-  if (origin !== allowed) {
+  const appOrigin = new URL(getEnv().NEXT_PUBLIC_APP_URL).origin;
+  const requestHost = (
+    request.headers.get("x-forwarded-host") ??
+    request.headers.get("host") ??
+    ""
+  )
+    .split(",")[0]
+    ?.trim();
+  let originHost = "";
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    throw new Error("Invalid origin");
+  }
+
+  if (origin !== appOrigin && originHost !== requestHost) {
     throw new Error("Invalid origin");
   }
 }

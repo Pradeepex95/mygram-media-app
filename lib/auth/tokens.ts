@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getEnv } from "@/lib/env";
 
 export const SESSION_COOKIE = "mygram_session";
@@ -62,11 +62,19 @@ export async function verifySessionToken(
   }
 }
 
+async function cookieSecure() {
+  const headerStore = await headers();
+  return (
+    headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim() === "https" ||
+    process.env.NODE_ENV === "production"
+  );
+}
+
 export async function setSessionCookie(token: string, expiresAt: Date) {
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: await cookieSecure(),
     sameSite: "lax",
     path: "/",
     expires: expiresAt,
@@ -77,7 +85,7 @@ export async function clearSessionCookie() {
   const jar = await cookies();
   jar.set(SESSION_COOKIE, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: await cookieSecure(),
     sameSite: "lax",
     path: "/",
     maxAge: 0,

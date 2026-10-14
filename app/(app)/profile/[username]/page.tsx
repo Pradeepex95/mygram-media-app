@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
+import { Role } from "@prisma/client";
 import { requireAuth } from "@/lib/auth/session";
 import { getProfile } from "@/server/posts/service";
+import { AvatarEditor } from "@/components/profile/avatar-editor";
 import { ProfileGrid } from "@/components/profile/profile-grid";
 import { Card } from "@/components/ui/card";
 
@@ -19,9 +21,11 @@ export default async function ProfilePage({ params }: Props) {
     <div className="space-y-6">
       <Card className="p-6">
         <div className="flex items-center gap-4">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-orange-400 text-2xl font-bold text-white">
-            {profile.username.slice(0, 1).toUpperCase()}
-          </div>
+          <AvatarEditor
+            username={profile.username}
+            avatarUrl={profile.avatarUrl}
+            canEdit={user.role === Role.ADMIN && user.id === profile.id}
+          />
           <div>
             <h1 className="text-2xl font-bold">{profile.username}</h1>
             <p className="text-sm text-zinc-500">{profile.postCount} posts</p>

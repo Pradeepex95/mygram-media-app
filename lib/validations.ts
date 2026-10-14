@@ -42,7 +42,17 @@ export const commentSchema = z.object({
 export const presignSchema = z.object({
   mimeType: z.string().min(3).max(100),
   sizeBytes: z.number().int().positive(),
-  kind: z.enum(["media", "thumb"]).default("media"),
+  kind: z.enum(["media", "thumb", "avatar"]).default("media"),
+});
+
+export const createStorySchema = z.object({
+  storageKey: z.string().min(1),
+  mimeType: z.string().min(3),
+  sizeBytes: z.number().int().positive(),
+});
+
+export const avatarSchema = z.object({
+  storageKey: z.string().min(1),
 });
 
 export const completeUploadSchema = z.object({

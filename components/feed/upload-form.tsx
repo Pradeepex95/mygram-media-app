@@ -99,8 +99,18 @@ export function UploadForm({
         }
       };
       xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error("Upload failed"));
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+          return;
+        }
+        let message = "Upload failed";
+        try {
+          const parsed = JSON.parse(xhr.responseText) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch {
+          if (xhr.responseText) message = xhr.responseText.slice(0, 180);
+        }
+        reject(new Error(message));
       };
       xhr.onerror = () => reject(new Error("Upload failed"));
       xhr.send(blob);

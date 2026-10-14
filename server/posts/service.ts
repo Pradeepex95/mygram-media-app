@@ -56,6 +56,17 @@ export async function createPost(params: {
       },
     });
 
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await tx.story.createMany({
+      data: params.media.map((m) => ({
+        authorId: params.authorId,
+        storageKey: m.storageKey,
+        mimeType: m.mimeType,
+        type: m.type,
+        expiresAt,
+      })),
+    });
+
     return {
       ...post,
       likeCount: 0,
@@ -118,7 +129,12 @@ export async function listFeed(params: {
       id: post.id,
       caption: post.caption,
       createdAt: post.createdAt,
-      author: post.author,
+      author: {
+        ...post.author,
+        avatarUrl: post.author.avatarKey
+          ? await createPresignedViewUrl(post.author.avatarKey)
+          : null,
+      },
       likeCount: post.likeCount,
       commentCount: post.commentCount,
       likedByMe: post.likes.length > 0,
@@ -364,6 +380,9 @@ export async function deletePost(params: {
   }
 
   await prisma.$transaction(async (tx) => {
+    await tx.story.deleteMany({
+      where: { storageKey: { in: post.media.map((m) => m.storageKey) } },
+    });
     await tx.post.delete({ where: { id: post.id } });
     if (params.asAdmin) {
       await writeAuditLog({

@@ -110,30 +110,49 @@ export function buildObjectKey(params: {
   return `${params.kind}/${params.userId}/${id}.${ext}`;
 }
 
-function signLocalToken(payload: string, expiresAt: number): string {
-  const secret = getEnv().AUTH_SECRET;
+export function signLocalTokenWithSecret(
+  payload: string,
+  expiresAt: number,
+  secret: string,
+): string {
   const body = `${payload}.${expiresAt}`;
   const sig = createHmac("sha256", secret).update(body).digest("base64url");
   return `${Buffer.from(body).toString("base64url")}.${sig}`;
 }
 
-export function verifyLocalToken(token: string): { key: string; expiresAt: number } | null {
+function signLocalToken(payload: string, expiresAt: number): string {
+  return signLocalTokenWithSecret(payload, expiresAt, getEnv().AUTH_SECRET);
+}
+
+export function verifyLocalTokenWithSecret(
+  token: string,
+  secret: string,
+  now = Date.now(),
+): { key: string; expiresAt: number } | null {
   try {
-    const [bodyB64, sig] = token.split(".");
+    const separator = token.indexOf(".");
+    if (separator <= 0) return null;
+    const bodyB64 = token.slice(0, separator);
+    const sig = token.slice(separator + 1);
     if (!bodyB64 || !sig) return null;
     const body = Buffer.from(bodyB64, "base64url").toString("utf8");
-    const secret = getEnv().AUTH_SECRET;
     const expected = createHmac("sha256", secret).update(body).digest("base64url");
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);
     if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-    const [key, expiresRaw] = body.split(".");
-    const expiresAt = Number(expiresRaw);
-    if (!key || !expiresAt || expiresAt < Date.now()) return null;
+    const dot = body.lastIndexOf(".");
+    if (dot <= 0) return null;
+    const key = body.slice(0, dot);
+    const expiresAt = Number(body.slice(dot + 1));
+    if (!key || !Number.isFinite(expiresAt) || expiresAt < now) return null;
     return { key, expiresAt };
   } catch {
     return null;
   }
+}
+
+export function verifyLocalToken(token: string): { key: string; expiresAt: number } | null {
+  return verifyLocalTokenWithSecret(token, getEnv().AUTH_SECRET);
 }
 
 export async function createPresignedUploadUrl(params: {
@@ -146,9 +165,8 @@ export async function createPresignedUploadUrl(params: {
 
   if (storageDriver() === "local") {
     const token = signLocalToken(params.key, Date.now() + expiresIn * 1000);
-    const base = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
     return {
-      uploadUrl: `${base}/api/storage/local?token=${encodeURIComponent(token)}&mode=put`,
+      uploadUrl: `/api/storage/local?token=${encodeURIComponent(token)}&mode=put`,
       key: params.key,
       expiresIn,
     };
@@ -170,8 +188,7 @@ export async function createPresignedViewUrl(key: string): Promise<string> {
   if (storageDriver() === "local") {
     const expiresIn = env.SIGNED_URL_TTL_SECONDS;
     const token = signLocalToken(key, Date.now() + expiresIn * 1000);
-    const base = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
-    return `${base}/api/storage/local?token=${encodeURIComponent(token)}&mode=get`;
+    return `/api/storage/local?token=${encodeURIComponent(token)}&mode=get`;
   }
 
   const command = new GetObjectCommand({

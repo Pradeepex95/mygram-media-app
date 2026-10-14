@@ -57,6 +57,7 @@ model User {
 
   sessions      Session[]
   posts         Post[]
+  stories       Story[]
   likes         Like[]
   comments      Comment[]
   loginAttempts LoginAttempt[]
@@ -82,6 +83,21 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model Story {
+  id         String    @id @default(cuid())
+  authorId   String
+  storageKey String
+  mimeType   String
+  type       MediaType
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([authorId, createdAt])
 }
 
 model Post {

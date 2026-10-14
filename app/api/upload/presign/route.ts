@@ -28,18 +28,24 @@ export async function POST(request: Request) {
     }
 
     const body = presignSchema.parse(await request.json());
+    if (body.kind === "avatar" && user.role !== "ADMIN") {
+      return jsonError("Only the admin can change this profile photo", 403);
+    }
     const check = validateUploadConstraints({
       mimeType: body.mimeType,
       sizeBytes: body.sizeBytes,
     });
-    if (!check.ok) {
-      return jsonError(check.error, 400);
+    if (!check.ok || (body.kind === "avatar" && check.kind !== "IMAGE")) {
+      return jsonError(
+        check.ok ? "Profile photos must be images" : check.error,
+        400,
+      );
     }
 
     const key = buildObjectKey({
       userId: user.id,
       mimeType: body.mimeType,
-      kind: body.kind === "thumb" ? "thumb" : "media",
+      kind: body.kind === "thumb" ? "thumb" : body.kind === "avatar" ? "avatar" : "media",
     });
 
     const signed = await createPresignedUploadUrl({
