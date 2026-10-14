@@ -18,6 +18,8 @@ type UserRow = {
 
 export function SubscribersPanel() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [username, setUsername] = useState("");
@@ -30,21 +32,26 @@ export function SubscribersPanel() {
   } | null>(null);
   const booted = useRef(false);
 
-  const load = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (status) params.set("status", status);
-    const res = await fetch(`/api/admin/subscribers?${params}`);
-    if (!res.ok) return toast.error("Failed to load subscribers");
-    const data = await res.json();
-    setUsers(data.users);
-  }, [q, status]);
+  const load = useCallback(
+    async (nextCursor?: string | null) => {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      if (status) params.set("status", status);
+      if (nextCursor) params.set("cursor", nextCursor);
+      const res = await fetch(`/api/admin/subscribers?${params}`);
+      if (!res.ok) return toast.error("Failed to load subscribers");
+      const data = await res.json();
+      setUsers((current) => (nextCursor ? [...current, ...data.users] : data.users));
+      setCursor(data.nextCursor);
+    },
+    [q, status],
+  );
 
   useEffect(() => {
     if (booted.current && !q && !status) return;
     booted.current = true;
     queueMicrotask(() => {
-      void load();
+      void load(null);
     });
   }, [load, q, status]);
 
@@ -65,9 +72,7 @@ export function SubscribersPanel() {
         username: username || undefined,
         password: password || undefined,
         months: customEndDate ? undefined : months,
-        customEndDate: customEndDate
-          ? new Date(customEndDate).toISOString()
-          : undefined,
+        customEndDate: customEndDate ? new Date(customEndDate).toISOString() : undefined,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -76,7 +81,7 @@ export function SubscribersPanel() {
     setUsername("");
     setPassword("");
     toast.success("Subscriber created — copy credentials now");
-    await load();
+    await load(null);
   }
 
   async function act(path: string, init?: RequestInit, success = "Done") {
@@ -87,7 +92,7 @@ export function SubscribersPanel() {
       return null;
     }
     toast.success(success);
-    await load();
+    await load(null);
     return data;
   }
 
@@ -176,17 +181,14 @@ export function SubscribersPanel() {
               <option value="EXPIRED">Expired</option>
               <option value="SUSPENDED">Suspended</option>
             </select>
-            <Button type="button" variant="secondary" onClick={() => void load()}>
+            <Button type="button" variant="secondary" onClick={() => void load(null)}>
               Refresh
             </Button>
           </div>
 
           <div className="space-y-3">
             {users.map((user) => (
-              <div
-                key={user.id}
-                className="rounded-lg border p-3 dark:border-zinc-800"
-              >
+              <div key={user.id} className="rounded-lg border p-3 dark:border-zinc-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-semibold">{user.username}</p>
@@ -238,8 +240,7 @@ export function SubscribersPanel() {
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            status:
-                              user.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED",
+                            status: user.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED",
                           }),
                         },
                         user.status === "SUSPENDED" ? "Reactivated" : "Suspended",
@@ -295,6 +296,24 @@ export function SubscribersPanel() {
               </div>
             ))}
           </div>
+          {cursor && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              disabled={loadingMore}
+              onClick={async () => {
+                setLoadingMore(true);
+                try {
+                  await load(cursor);
+                } finally {
+                  setLoadingMore(false);
+                }
+              }}
+            >
+              {loadingMore ? "Loading..." : "Load more subscribers"}
+            </Button>
+          )}
         </CardContent>
       </Card>
     </div>

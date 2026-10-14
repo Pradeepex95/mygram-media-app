@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -37,45 +38,45 @@ enum AuditAction {
 }
 
 model User {
-  id                 String             @id @default(cuid())
-  email              String?            @unique
-  username           String             @unique
-  passwordHash       String
-  role               Role               @default(SUBSCRIBER)
-  bio                String?
-  avatarKey          String?
-  subscriptionStart  DateTime?
-  subscriptionEnd    DateTime?
-  status             SubscriptionStatus @default(ACTIVE)
-  activeSessionId    String?            @unique
-  sessionVersion     Int                @default(0)
-  failedLoginCount   Int                @default(0)
-  lockedUntil        DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                String             @id @default(cuid())
+  email             String?            @unique
+  username          String             @unique
+  passwordHash      String
+  role              Role               @default(SUBSCRIBER)
+  bio               String?
+  avatarKey         String?
+  subscriptionStart DateTime?
+  subscriptionEnd   DateTime?
+  status            SubscriptionStatus @default(ACTIVE)
+  activeSessionId   String?            @unique
+  sessionVersion    Int                @default(0)
+  failedLoginCount  Int                @default(0)
+  lockedUntil       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
-  sessions     Session[]
-  posts        Post[]
-  likes        Like[]
-  comments     Comment[]
+  sessions      Session[]
+  posts         Post[]
+  likes         Like[]
+  comments      Comment[]
   loginAttempts LoginAttempt[]
-  auditLogs    AuditLog[]           @relation("AuditActor")
-  auditTargets AuditLog[]           @relation("AuditTarget")
+  auditLogs     AuditLog[]     @relation("AuditActor")
+  auditTargets  AuditLog[]     @relation("AuditTarget")
 
   @@index([status, subscriptionEnd])
-  @@index([username])
+  @@index([createdAt, id])
   @@index([role])
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  userAgent String?
-  ipAddress String?
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-  revokedAt DateTime?
-  lastSeenAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  userId     String
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastSeenAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -84,11 +85,13 @@ model Session {
 }
 
 model Post {
-  id        String   @id @default(cuid())
-  caption   String?
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  caption      String?
+  authorId     String
+  likeCount    Int      @default(0)
+  commentCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   media    Media[]
@@ -96,6 +99,7 @@ model Post {
   comments Comment[]
 
   @@index([createdAt])
+  @@index([createdAt, id])
   @@index([authorId, createdAt])
 }
 
@@ -142,22 +146,23 @@ model Comment {
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([postId, createdAt])
+  @@index([postId, createdAt, id])
   @@index([userId])
 }
 
 model AuditLog {
-  id         String      @id @default(cuid())
-  actorId    String
-  targetId   String?
-  action     AuditAction
-  metadata   Json?
-  createdAt  DateTime    @default(now())
+  id        String      @id @default(cuid())
+  actorId   String
+  targetId  String?
+  action    AuditAction
+  metadata  Json?
+  createdAt DateTime    @default(now())
 
   actor  User  @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
   target User? @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+  @@index([createdAt, id])
   @@index([actorId])
   @@index([action])
 }

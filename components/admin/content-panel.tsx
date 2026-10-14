@@ -25,21 +25,33 @@ export function ContentPanel() {
   const [tab, setTab] = useState<"posts" | "comments">("posts");
   const [posts, setPosts] = useState<AdminPost[]>([]);
   const [comments, setComments] = useState<AdminComment[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const lastTab = useRef<string | null>(null);
 
-  async function load(type: "posts" | "comments") {
-    const res = await fetch(`/api/admin/content?type=${type}`);
+  async function load(type: "posts" | "comments", nextCursor?: string | null) {
+    const params = new URLSearchParams({ type });
+    if (nextCursor) params.set("cursor", nextCursor);
+    const res = await fetch(`/api/admin/content?${params}`);
     if (!res.ok) return toast.error("Failed to load content");
     const data = await res.json();
-    if (type === "posts") setPosts(data.posts || []);
-    else setComments(data.comments || []);
+    if (type === "posts") {
+      setPosts((current) =>
+        nextCursor ? [...current, ...(data.posts || [])] : data.posts || [],
+      );
+    } else {
+      setComments((current) =>
+        nextCursor ? [...current, ...(data.comments || [])] : data.comments || [],
+      );
+    }
+    setCursor(data.nextCursor ?? null);
   }
 
   useEffect(() => {
     if (lastTab.current === tab) return;
     lastTab.current = tab;
     queueMicrotask(() => {
-      void load(tab);
+      void load(tab, null);
     });
   }, [tab]);
 
@@ -66,8 +78,8 @@ export function ContentPanel() {
             <Card key={post.id}>
               <CardHeader>
                 <CardTitle className="text-base">
-                  @{post.author.username} · {post.likeCount} likes ·{" "}
-                  {post.commentCount} comments
+                  @{post.author.username} · {post.likeCount} likes · {post.commentCount}{" "}
+                  comments
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -90,7 +102,7 @@ export function ContentPanel() {
                     });
                     if (!res.ok) return toast.error("Delete failed");
                     toast.success("Post deleted");
-                    void load("posts");
+                    void load("posts", null);
                   }}
                 >
                   Delete post
@@ -105,8 +117,8 @@ export function ContentPanel() {
             <Card key={comment.id}>
               <CardContent className="space-y-2 pt-4">
                 <p className="text-sm">
-                  <span className="font-semibold">@{comment.user.username}</span>{" "}
-                  on post {comment.post.id}
+                  <span className="font-semibold">@{comment.user.username}</span> on post{" "}
+                  {comment.post.id}
                 </p>
                 <p className="text-sm">{comment.body}</p>
                 <Button
@@ -119,7 +131,7 @@ export function ContentPanel() {
                     });
                     if (!res.ok) return toast.error("Delete failed");
                     toast.success("Comment deleted");
-                    void load("comments");
+                    void load("comments", null);
                   }}
                 >
                   Delete comment
@@ -128,6 +140,24 @@ export function ContentPanel() {
             </Card>
           ))}
         </div>
+      )}
+      {cursor && (
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          disabled={loadingMore}
+          onClick={async () => {
+            setLoadingMore(true);
+            try {
+              await load(tab, cursor);
+            } finally {
+              setLoadingMore(false);
+            }
+          }}
+        >
+          {loadingMore ? "Loading..." : "Load more"}
+        </Button>
       )}
     </div>
   );

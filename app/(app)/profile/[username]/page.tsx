@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth/session";
 import { getProfile } from "@/server/posts/service";
+import { ProfileGrid } from "@/components/profile/profile-grid";
 import { Card } from "@/components/ui/card";
 
 type Props = { params: Promise<{ username: string }> };
@@ -30,34 +30,11 @@ export default async function ProfilePage({ params }: Props) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-3 gap-1 md:gap-2">
-        {profile.posts.map((post) => {
-          const media = post.media[0];
-          const src = media?.thumbnailUrl || media?.url;
-          return (
-            <Link
-              key={post.id}
-              href={`/p/${post.id}`}
-              className="relative aspect-square overflow-hidden bg-zinc-100 dark:bg-zinc-900"
-            >
-              {src ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={src}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : null}
-              {media?.type === "VIDEO" && (
-                <span className="absolute right-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">
-                  VIDEO
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
+      <ProfileGrid
+        username={profile.username}
+        initialPosts={profile.posts}
+        initialCursor={profile.nextCursor}
+      />
     </div>
   );
 }

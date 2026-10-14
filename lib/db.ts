@@ -1,13 +1,43 @@
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const isDevelopment = process.env.NODE_ENV === "development";
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+function createPrismaClient() {
+  const client = new PrismaClient({
+    log: isDevelopment
+      ? [
+          { emit: "event", level: "query" },
+          { emit: "stdout", level: "warn" },
+          { emit: "stdout", level: "error" },
+        ]
+      : [{ emit: "stdout", level: "error" }],
+    transactionOptions: {
+      maxWait: 5_000,
+      timeout: 10_000,
+    },
   });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  if (isDevelopment) {
+    const threshold = Number(process.env.DB_SLOW_QUERY_MS ?? 200);
+    client.$on("query", (event) => {
+      if (event.duration >= threshold) {
+        console.warn(
+          JSON.stringify({
+            event: "slow_database_query",
+            durationMs: event.duration,
+            target: event.target,
+            query: event.query.replace(/\s+/g, " ").slice(0, 500),
+          }),
+        );
+      }
+    });
+  }
+
+  return client;
 }
+
+type PrismaSingleton = ReturnType<typeof createPrismaClient>;
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaSingleton };
+
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+globalForPrisma.prisma = prisma;

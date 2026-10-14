@@ -76,31 +76,36 @@ export async function loginWithCredentials(params: {
 
   const valid = await verifyPassword(params.password, user.passwordHash);
   if (!valid) {
-    const failedLoginCount = user.failedLoginCount + 1;
-    const lockedUntil =
-      failedLoginCount >= env.LOGIN_MAX_ATTEMPTS
-        ? new Date(Date.now() + env.LOGIN_LOCKOUT_MINUTES * 60 * 1000)
-        : null;
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginCount,
-        lockedUntil,
-      },
+    const lockState = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: { increment: 1 } },
+        select: { failedLoginCount: true },
+      });
+      const lockedUntil =
+        updated.failedLoginCount >= env.LOGIN_MAX_ATTEMPTS
+          ? new Date(Date.now() + env.LOGIN_LOCKOUT_MINUTES * 60 * 1000)
+          : null;
+      if (lockedUntil) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { lockedUntil },
+          select: { id: true },
+        });
+      }
+      await tx.loginAttempt.create({
+        data: {
+          userId: user.id,
+          username,
+          ipAddress: params.ipAddress ?? undefined,
+          success: false,
+          reason: "BAD_PASSWORD",
+        },
+      });
+      return { failedLoginCount: updated.failedLoginCount, lockedUntil };
     });
 
-    await prisma.loginAttempt.create({
-      data: {
-        userId: user.id,
-        username,
-        ipAddress: params.ipAddress ?? undefined,
-        success: false,
-        reason: "BAD_PASSWORD",
-      },
-    });
-
-    if (lockedUntil) {
+    if (lockState.lockedUntil) {
       throw new AuthError(
         "UNAUTHENTICATED",
         `Too many failed attempts. Account locked for ${env.LOGIN_LOCKOUT_MINUTES} minutes.`,

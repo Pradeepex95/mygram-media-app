@@ -65,5 +65,19 @@ export const completeUploadSchema = z.object({
 
 export const feedQuerySchema = z.object({
   cursor: z.string().optional(),
-  take: z.coerce.number().int().min(1).max(30).optional(),
+  take: z.coerce.number().int().min(1).max(20).optional(),
+});
+
+export const paginatedQuerySchema = z.object({
+  cursor: z.string().optional(),
+  take: z.coerce.number().int().min(1).max(20).optional(),
+});
+
+export const subscriberQuerySchema = paginatedQuerySchema.extend({
+  q: z.string().trim().max(64).optional(),
+  status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED"]).optional(),
+});
+
+export const adminContentQuerySchema = paginatedQuerySchema.extend({
+  type: z.enum(["posts", "comments"]).default("posts"),
 });

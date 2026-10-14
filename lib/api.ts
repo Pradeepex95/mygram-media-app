@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { AuthError } from "@/lib/auth/session";
+import { InvalidCursorError } from "@/lib/pagination";
 
 export function jsonOk<T>(data: T, init?: ResponseInit) {
   return NextResponse.json(data, { status: 200, ...init });
@@ -25,8 +26,7 @@ export function handleRouteError(error: unknown) {
         ? 401
         : error.reason === "SESSION_REPLACED"
           ? 401
-          : error.reason === "SUBSCRIPTION_EXPIRED" ||
-              error.reason === "SUSPENDED"
+          : error.reason === "SUBSCRIPTION_EXPIRED" || error.reason === "SUSPENDED"
             ? 403
             : 401;
     return jsonError(error.message, status, { reason: error.reason });
@@ -39,6 +39,10 @@ export function handleRouteError(error: unknown) {
         message: i.message,
       })),
     });
+  }
+
+  if (error instanceof InvalidCursorError) {
+    return jsonError(error.message, 400);
   }
 
   console.error("Unhandled API error");

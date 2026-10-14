@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
+import { Button } from "@/components/ui/button";
 
 type AuditItem = {
   id: string;
@@ -14,15 +15,26 @@ type AuditItem = {
 
 export function AuditPanel() {
   const [items, setItems] = useState<AuditItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const booted = useRef(false);
+
+  async function load(nextCursor?: string | null) {
+    const params = new URLSearchParams();
+    if (nextCursor) params.set("cursor", nextCursor);
+    const response = await fetch(`/api/admin/audit?${params}`);
+    const data = await response.json();
+    setItems((current) =>
+      nextCursor ? [...current, ...(data.items || [])] : data.items || [],
+    );
+    setCursor(data.nextCursor ?? null);
+  }
 
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
     queueMicrotask(() => {
-      void fetch("/api/admin/audit")
-        .then((r) => r.json())
-        .then((d) => setItems(d.items || []));
+      void load(null);
     });
   }, []);
 
@@ -41,8 +53,24 @@ export function AuditPanel() {
           </CardContent>
         </Card>
       ))}
-      {!items.length && (
-        <p className="text-sm text-zinc-500">No admin actions yet.</p>
+      {!items.length && <p className="text-sm text-zinc-500">No admin actions yet.</p>}
+      {cursor && (
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true);
+            try {
+              await load(cursor);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
+          {loading ? "Loading..." : "Load more audit entries"}
+        </Button>
       )}
     </div>
   );

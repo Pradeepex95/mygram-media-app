@@ -1,12 +1,7 @@
 import { addMonths } from "date-fns";
 import { AuditAction, Role, SubscriptionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import {
-  generateStrongPassword,
-  generateUsername,
-  hashPassword,
-} from "@/lib/password";
-import { forceLogoutUser } from "@/lib/auth/session";
+import { generateStrongPassword, generateUsername, hashPassword } from "@/lib/password";
 import { writeAuditLog } from "@/server/admin/audit";
 
 export async function createSubscriber(params: {
@@ -30,25 +25,28 @@ export async function createSubscriber(params: {
     ? params.customEndDate
     : addMonths(start, params.months ?? 1);
 
-  const user = await prisma.user.create({
-    data: {
-      username,
-      passwordHash,
-      role: Role.SUBSCRIBER,
-      status: SubscriptionStatus.ACTIVE,
-      subscriptionStart: start,
-      subscriptionEnd: end,
-    },
-  });
-
-  await writeAuditLog({
-    actorId: params.actorId,
-    targetId: user.id,
-    action: AuditAction.CREATE_SUBSCRIBER,
-    metadata: {
-      username: user.username,
-      subscriptionEnd: end.toISOString(),
-    },
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        username,
+        passwordHash,
+        role: Role.SUBSCRIBER,
+        status: SubscriptionStatus.ACTIVE,
+        subscriptionStart: start,
+        subscriptionEnd: end,
+      },
+    });
+    await writeAuditLog({
+      actorId: params.actorId,
+      targetId: created.id,
+      action: AuditAction.CREATE_SUBSCRIBER,
+      metadata: {
+        username: created.username,
+        subscriptionEnd: end.toISOString(),
+      },
+      client: tx,
+    });
+    return created;
   });
 
   return {
@@ -86,23 +84,24 @@ export async function extendSubscription(params: {
     ? params.customEndDate
     : addMonths(base, params.months ?? 1);
 
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      subscriptionEnd: end,
-      status: SubscriptionStatus.ACTIVE,
-      subscriptionStart: user.subscriptionStart ?? new Date(),
-    },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: user.id },
+      data: {
+        subscriptionEnd: end,
+        status: SubscriptionStatus.ACTIVE,
+        subscriptionStart: user.subscriptionStart ?? new Date(),
+      },
+    });
+    await writeAuditLog({
+      actorId: params.actorId,
+      targetId: user.id,
+      action: AuditAction.EXTEND_SUBSCRIPTION,
+      metadata: { subscriptionEnd: end.toISOString() },
+      client: tx,
+    });
+    return updated;
   });
-
-  await writeAuditLog({
-    actorId: params.actorId,
-    targetId: user.id,
-    action: AuditAction.EXTEND_SUBSCRIPTION,
-    metadata: { subscriptionEnd: end.toISOString() },
-  });
-
-  return updated;
 }
 
 export async function setUserStatus(params: {
@@ -115,73 +114,134 @@ export async function setUserStatus(params: {
     throw new Error("Cannot suspend admin");
   }
 
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: { status: params.status },
+  return prisma.$transaction(async (tx) => {
+    if (params.status === "SUSPENDED") {
+      await tx.session.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    const updated = await tx.user.update({
+      where: { id: user.id },
+      data: {
+        status: params.status,
+        ...(params.status === "SUSPENDED"
+          ? {
+              activeSessionId: null,
+              sessionVersion: { increment: 1 },
+            }
+          : {}),
+      },
+    });
+    await writeAuditLog({
+      actorId: params.actorId,
+      targetId: user.id,
+      action:
+        params.status === "SUSPENDED"
+          ? AuditAction.SUSPEND_USER
+          : AuditAction.REACTIVATE_USER,
+      client: tx,
+    });
+    return updated;
   });
-
-  if (params.status === "SUSPENDED") {
-    await forceLogoutUser(user.id);
-  }
-
-  await writeAuditLog({
-    actorId: params.actorId,
-    targetId: user.id,
-    action:
-      params.status === "SUSPENDED"
-        ? AuditAction.SUSPEND_USER
-        : AuditAction.REACTIVATE_USER,
-  });
-
-  return updated;
 }
 
-export async function resetUserPassword(params: {
-  actorId: string;
-  userId: string;
-}) {
+export async function resetUserPassword(params: { actorId: string; userId: string }) {
   const password = generateStrongPassword();
   const passwordHash = await hashPassword(password);
-  const user = await prisma.user.update({
-    where: { id: params.userId },
-    data: { passwordHash },
-  });
-  await forceLogoutUser(user.id);
-  await writeAuditLog({
-    actorId: params.actorId,
-    targetId: user.id,
-    action: AuditAction.RESET_PASSWORD,
+  const user = await prisma.$transaction(async (tx) => {
+    await tx.session.updateMany({
+      where: { userId: params.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    const updated = await tx.user.update({
+      where: { id: params.userId },
+      data: {
+        passwordHash,
+        activeSessionId: null,
+        sessionVersion: { increment: 1 },
+      },
+    });
+    await writeAuditLog({
+      actorId: params.actorId,
+      targetId: updated.id,
+      action: AuditAction.RESET_PASSWORD,
+      client: tx,
+    });
+    return updated;
   });
   return { username: user.username, password };
 }
 
-export async function forceLogoutSubscriber(params: {
-  actorId: string;
-  userId: string;
-}) {
-  await forceLogoutUser(params.userId);
-  await writeAuditLog({
-    actorId: params.actorId,
-    targetId: params.userId,
-    action: AuditAction.FORCE_LOGOUT,
+export async function forceLogoutSubscriber(params: { actorId: string; userId: string }) {
+  await prisma.$transaction(async (tx) => {
+    await tx.session.updateMany({
+      where: { userId: params.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await tx.user.update({
+      where: { id: params.userId },
+      data: {
+        activeSessionId: null,
+        sessionVersion: { increment: 1 },
+      },
+    });
+    await writeAuditLog({
+      actorId: params.actorId,
+      targetId: params.userId,
+      action: AuditAction.FORCE_LOGOUT,
+      client: tx,
+    });
   });
 }
 
-export async function deleteSubscriber(params: {
-  actorId: string;
-  userId: string;
-}) {
+export async function deleteSubscriber(params: { actorId: string; userId: string }) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: params.userId } });
   if (user.role === Role.ADMIN) {
     throw new Error("Cannot delete admin");
   }
 
-  await writeAuditLog({
-    actorId: params.actorId,
-    targetId: user.id,
-    action: AuditAction.DELETE_USER,
-    metadata: { username: user.username },
-  });
+  const [likes, comments] = await Promise.all([
+    prisma.like.groupBy({
+      by: ["postId"],
+      where: {
+        userId: user.id,
+        post: { authorId: { not: user.id } },
+      },
+      _count: { _all: true },
+    }),
+    prisma.comment.groupBy({
+      by: ["postId"],
+      where: {
+        userId: user.id,
+        post: { authorId: { not: user.id } },
+      },
+      _count: { _all: true },
+    }),
+  ]);
 
-  await prisma.user.delete({ where: { id: user.id } });
+  await prisma.$transaction(async (tx) => {
+    for (const like of likes) {
+      await tx.post.update({
+        where: { id: like.postId },
+        data: { likeCount: { decrement: like._count._all } },
+        select: { id: true },
+      });
+    }
+    for (const comment of comments) {
+      await tx.post.update({
+        where: { id: comment.postId },
+        data: { commentCount: { decrement: comment._count._all } },
+        select: { id: true },
+      });
+    }
+    await writeAuditLog({
+      actorId: params.actorId,
+      targetId: user.id,
+      action: AuditAction.DELETE_USER,
+      metadata: { username: user.username },
+      client: tx,
+    });
+    await tx.user.delete({ where: { id: user.id } });
+  });
 }

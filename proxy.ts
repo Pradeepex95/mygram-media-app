@@ -1,15 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-import { PrismaClient, Role, SubscriptionStatus } from "@prisma/client";
+import { Role, SubscriptionStatus } from "@prisma/client";
+import { prisma } from "@/lib/db";
 
 const SESSION_COOKIE = "mygram_session";
-
-let prisma: PrismaClient | null = null;
-
-function getPrisma() {
-  if (!prisma) prisma = new PrismaClient();
-  return prisma;
-}
 
 function isStaticAsset(pathname: string) {
   return (
@@ -57,7 +51,7 @@ async function resolveAuth(token: string) {
     return { error: "UNAUTHENTICATED" as const };
   }
 
-  const user = await getPrisma().user.findUnique({ where: { id: payload.sub } });
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user) return { error: "UNAUTHENTICATED" as const };
 
   if (
@@ -68,7 +62,7 @@ async function resolveAuth(token: string) {
     return { error: "SESSION_REPLACED" as const };
   }
 
-  const session = await getPrisma().session.findUnique({
+  const session = await prisma.session.findUnique({
     where: { id: payload.sid },
   });
   if (!session || session.revokedAt || session.expiresAt.getTime() < Date.now()) {
@@ -145,7 +139,12 @@ export async function proxy(request: NextRequest) {
                   : "Please log in.",
           reason: auth.error,
         },
-        { status: auth.error === "SUBSCRIPTION_EXPIRED" || auth.error === "SUSPENDED" ? 403 : 401 },
+        {
+          status:
+            auth.error === "SUBSCRIPTION_EXPIRED" || auth.error === "SUSPENDED"
+              ? 403
+              : 401,
+        },
       );
     }
     return redirectToLogin(request, auth.error ?? "UNAUTHENTICATED");

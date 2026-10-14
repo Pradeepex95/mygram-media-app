@@ -25,6 +25,7 @@ type PostDetailData = {
   commentCount: number;
   likedByMe: boolean;
   comments: Comment[];
+  commentNextCursor: string | null;
   media: Array<{
     id: string;
     type: "IMAGE" | "VIDEO";
@@ -37,6 +38,8 @@ export function PostDetail({ post }: { post: PostDetailData }) {
   const [liked, setLiked] = useState(post.likedByMe);
   const [likeCount, setLikeCount] = useState(post.likeCount);
   const [comments, setComments] = useState(post.comments);
+  const [commentCursor, setCommentCursor] = useState(post.commentNextCursor);
+  const [loadingComments, setLoadingComments] = useState(false);
   const [body, setBody] = useState("");
   const media = post.media[0];
 
@@ -65,6 +68,24 @@ export function PostDetail({ post }: { post: PostDetailData }) {
     setBody("");
   }
 
+  async function loadMoreComments() {
+    if (!commentCursor || loadingComments) return;
+    setLoadingComments(true);
+    try {
+      const params = new URLSearchParams({ cursor: commentCursor });
+      const res = await fetch(`/api/posts/${post.id}/comments?${params}`);
+      if (!res.ok) {
+        toast.error("Could not load more comments");
+        return;
+      }
+      const data = await res.json();
+      setComments((prev) => [...prev, ...data.items]);
+      setCommentCursor(data.nextCursor);
+    } finally {
+      setLoadingComments(false);
+    }
+  }
+
   return (
     <Card className="overflow-hidden">
       <div className="px-4 py-3 font-semibold">
@@ -73,7 +94,11 @@ export function PostDetail({ post }: { post: PostDetailData }) {
         </Link>
       </div>
       {media?.type === "VIDEO" ? (
-        <VideoPlayer src={media.url} poster={media.thumbnailUrl} className="aspect-square w-full" />
+        <VideoPlayer
+          src={media.url}
+          poster={media.thumbnailUrl}
+          className="aspect-square w-full"
+        />
       ) : media ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -104,6 +129,17 @@ export function PostDetail({ post }: { post: PostDetailData }) {
               {c.body}
             </p>
           ))}
+          {commentCursor && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={loadingComments}
+              onClick={loadMoreComments}
+            >
+              {loadingComments ? "Loading..." : "Load more comments"}
+            </Button>
+          )}
         </div>
         <form className="flex gap-2" onSubmit={submitComment}>
           <Input

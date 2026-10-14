@@ -8,6 +8,8 @@ const boolString = z
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().min(1),
+  DIRECT_URL: z.string().min(1).optional(),
+  DB_SLOW_QUERY_MS: z.coerce.number().int().nonnegative().default(200),
   AUTH_SECRET: z.string().min(32),
   NEXT_PUBLIC_APP_NAME: z.string().default("MyGram"),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
@@ -17,8 +19,16 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(8),
   ADMIN_USERNAME: z.string().min(3).default("admin"),
   ALLOW_SUBSCRIBER_UPLOADS: boolString.default(true),
-  MAX_IMAGE_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
-  MAX_VIDEO_BYTES: z.coerce.number().int().positive().default(500 * 1024 * 1024),
+  MAX_IMAGE_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10 * 1024 * 1024),
+  MAX_VIDEO_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(500 * 1024 * 1024),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOGIN_LOCKOUT_MINUTES: z.coerce.number().int().positive().default(15),
   STORAGE_DRIVER: z.enum(["s3", "local"]).default("s3"),

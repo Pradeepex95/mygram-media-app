@@ -25,6 +25,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mygram?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/mygram?schema=public
       AUTH_SECRET: ci-auth-secret-must-be-at-least-32-chars
       ADMIN_EMAIL: admin@example.com
       ADMIN_PASSWORD: ChangeMeNow!123
@@ -46,6 +47,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
+      - run: npx prisma migrate deploy
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

@@ -20,17 +20,17 @@ Built with **Next.js 16 (App Router)**, **TypeScript**, **Tailwind CSS**, **Pris
 
 ## Architecture decisions
 
-| Topic | Choice |
-| --- | --- |
-| Auth | Custom JWT in HTTP-only `SameSite=Lax` cookie (`mygram_session`) |
-| Password hashing | bcrypt (cost 12) |
-| Single-session | `User.activeSessionId` + `User.sessionVersion` + `Session` rows |
-| Session policy | `SESSION_POLICY=newest_wins` (default) or `block_if_active` |
-| Storage | Private S3-compatible bucket + short-lived signed view URLs |
-| Edge auth gate | `proxy.ts` (Next.js 16 Node proxy; replaces deprecated `middleware`) |
-| Payments | Stubbed Stripe/Razorpay interfaces for Phase 2 |
+| Topic            | Choice                                                               |
+| ---------------- | -------------------------------------------------------------------- |
+| Auth             | Custom JWT in HTTP-only `SameSite=Lax` cookie (`mygram_session`)     |
+| Password hashing | bcrypt (cost 12)                                                     |
+| Single-session   | `User.activeSessionId` + `User.sessionVersion` + `Session` rows      |
+| Session policy   | `SESSION_POLICY=newest_wins` (default) or `block_if_active`          |
+| Storage          | Private S3-compatible bucket + short-lived signed view URLs          |
+| Edge auth gate   | `proxy.ts` (Next.js 16 Node proxy; replaces deprecated `middleware`) |
+| Payments         | Stubbed Stripe/Razorpay interfaces for Phase 2                       |
 
-**Newest login wins (default):** a successful login creates a new session ID, increments `sessionVersion`, and revokes previous sessions. The old device is redirected to `/login?reason=SESSION_REPLACED` with the message: *You were logged out because your account was used on another device.*
+**Newest login wins (default):** a successful login creates a new session ID, increments `sessionVersion`, and revokes previous sessions. The old device is redirected to `/login?reason=SESSION_REPLACED` with the message: _You were logged out because your account was used on another device._
 
 ## Prerequisites
 
@@ -64,12 +64,12 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### Seeded accounts
 
-| Role | Username | Password | Notes |
-| --- | --- | --- | --- |
-| Admin | `admin` (or `ADMIN_USERNAME`) | `ADMIN_PASSWORD` | Full access |
-| Subscriber | `demo_active` | `DemoActive!123` | Can log in |
-| Subscriber | `demo_expired` | `DemoExpired!123` | Login blocked |
-| Subscriber | `demo_suspended` | `DemoSuspended!123` | Login blocked |
+| Role       | Username                      | Password            | Notes         |
+| ---------- | ----------------------------- | ------------------- | ------------- |
+| Admin      | `admin` (or `ADMIN_USERNAME`) | `ADMIN_PASSWORD`    | Full access   |
+| Subscriber | `demo_active`                 | `DemoActive!123`    | Can log in    |
+| Subscriber | `demo_expired`                | `DemoExpired!123`   | Login blocked |
+| Subscriber | `demo_suspended`              | `DemoSuspended!123` | Login blocked |
 
 ## Environment variables
 
@@ -78,33 +78,39 @@ See [`.env.example`](./.env.example) for the full list.
 ### How to obtain key values
 
 1. **`DATABASE_URL`**
-   - **Neon:** create a project → Connection string (pooled or direct).
-   - **Supabase:** Project Settings → Database → URI.
+   - Runtime traffic must use a **pooled** URL: Neon pooled connection, Supabase transaction pooler, or PgBouncer.
+   - For serverless, start with `connection_limit=1`; for a small long-lived container, start with `connection_limit=5` and keep `(instances × workers × connection_limit)` below the database plan limit.
+   - Add a PostgreSQL statement timeout, for example `options=-c%20statement_timeout%3D10000`.
    - **Local:** `postgresql://postgres:postgres@localhost:5432/mygram?schema=public`
 
-2. **`AUTH_SECRET`**
+2. **`DIRECT_URL`**
+   - Use the provider's **direct/non-pooled** URL for Prisma migrations.
+   - It can equal `DATABASE_URL` for local Docker PostgreSQL.
+   - Never run schema migrations through a transaction pooler.
+
+3. **`AUTH_SECRET`**
    - Generate: `openssl rand -base64 48`
    - Must be at least 32 characters.
 
-3. **Object storage (R2)**
+4. **Object storage (R2)**
    - Cloudflare dashboard → R2 → Create bucket (keep private).
    - Manage R2 API Tokens → create token with Object Read & Write.
    - Set `S3_ENDPOINT` to `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
    - Set `S3_FORCE_PATH_STYLE=false` for R2 (or follow Cloudflare docs).
    - `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` from the token.
 
-4. **Object storage (AWS S3)**
+5. **Object storage (AWS S3)**
    - Create a private bucket + IAM user with `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`.
    - Leave `S3_ENDPOINT` empty; set `S3_REGION` and credentials.
 
-5. **Local MinIO**
+6. **Local MinIO**
    - Provided by `docker compose` on `localhost:9000` (console `9001`).
    - Defaults match `.env.example`.
 
-6. **`CRON_SECRET`**
+7. **`CRON_SECRET`**
    - Random string; Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
 
-7. **Upstash Redis (optional)**
+8. **Upstash Redis (optional)**
    - Create a Redis database → copy REST URL + token for distributed rate limits.
    - Without it, an in-memory limiter is used (fine for single instance / local).
 
@@ -164,7 +170,7 @@ Other actions: extend subscription, suspend/reactivate, reset password, force lo
 2. Log in as `demo_active` in Browser A → open `/feed`.
 3. Log in as the same user in Browser B (or a private window).
 4. Refresh Browser A (or navigate) → you should land on `/login` with:
-   *You were logged out because your account was used on another device.*
+   _You were logged out because your account was used on another device._
 5. Optionally set `SESSION_POLICY=block_if_active`, keep Browser A logged in, and attempt login in Browser B → login is rejected while the other session is active.
 
 Automated tests:
@@ -184,15 +190,15 @@ Covers subscription expiry/suspend rules, session policy decisions, and lockout 
 
 ## Scripts
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Next.js dev server |
+| Command                   | Description              |
+| ------------------------- | ------------------------ |
+| `npm run dev`             | Next.js dev server       |
 | `npm run build` / `start` | Production build / serve |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript |
-| `npm test` | Vitest |
-| `npm run seed` | Seed admin + demo users |
-| `npx prisma migrate dev` | Create/apply migrations |
+| `npm run lint`            | ESLint                   |
+| `npm run typecheck`       | TypeScript               |
+| `npm test`                | Vitest                   |
+| `npm run seed`            | Seed admin + demo users  |
+| `npx prisma migrate dev`  | Create/apply migrations  |
 
 ## Project structure
 
