@@ -2,7 +2,7 @@
 
 Private, Instagram-style media sharing for invited subscribers. The display name is configurable via `NEXT_PUBLIC_APP_NAME` (default: **MyGram**).
 
-Built with **Next.js 16 (App Router)**, **TypeScript**, **Tailwind CSS**, **Prisma + PostgreSQL**, **JWT HTTP-only cookies**, and **S3-compatible object storage** (Cloudflare R2 / AWS S3 / local MinIO).
+Built with **Next.js 16 (App Router)**, **TypeScript**, **Tailwind CSS**, **Prisma + PostgreSQL**, **JWT HTTP-only cookies**, and **S3-compatible object storage** (Cloudflare R2 / AWS S3). Local development can use `STORAGE_DRIVER=local` when MinIO/R2 is unavailable.
 
 ## Features
 
