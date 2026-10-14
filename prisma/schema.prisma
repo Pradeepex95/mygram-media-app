@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SUBSCRIBER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum AuditAction {
+  CREATE_SUBSCRIBER
+  EXTEND_SUBSCRIPTION
+  SUSPEND_USER
+  REACTIVATE_USER
+  RESET_PASSWORD
+  FORCE_LOGOUT
+  DELETE_USER
+  DELETE_POST
+  DELETE_COMMENT
+  UPDATE_USER
+}
+
+model User {
+  id                 String             @id @default(cuid())
+  email              String?            @unique
+  username           String             @unique
+  passwordHash       String
+  role               Role               @default(SUBSCRIBER)
+  bio                String?
+  avatarKey          String?
+  subscriptionStart  DateTime?
+  subscriptionEnd    DateTime?
+  status             SubscriptionStatus @default(ACTIVE)
+  activeSessionId    String?            @unique
+  sessionVersion     Int                @default(0)
+  failedLoginCount   Int                @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  sessions     Session[]
+  posts        Post[]
+  likes        Like[]
+  comments     Comment[]
+  loginAttempts LoginAttempt[]
+  auditLogs    AuditLog[]           @relation("AuditActor")
+  auditTargets AuditLog[]           @relation("AuditTarget")
+
+  @@index([status, subscriptionEnd])
+  @@index([username])
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  caption   String?
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media    Media[]
+  likes    Like[]
+  comments Comment[]
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Media {
+  id           String    @id @default(cuid())
+  postId       String
+  type         MediaType
+  storageKey   String
+  thumbnailKey String?
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  durationSec  Float?
+  createdAt    DateTime  @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([storageKey])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String
+  targetId   String?
+  action     AuditAction
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  actor  User  @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+  target User? @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([action])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  userId    String?
+  username  String
+  ipAddress String?
+  success   Boolean
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([username, createdAt])
+  @@index([ipAddress, createdAt])
+}
