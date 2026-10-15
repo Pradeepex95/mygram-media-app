@@ -24,13 +24,20 @@ export function StoryViewer({
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(0);
+  const [mediaFailed, setMediaFailed] = useState(false);
   const item = group.items[index];
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
-      if (event.key === "ArrowRight") setIndex((n) => Math.min(group.items.length - 1, n + 1));
-      if (event.key === "ArrowLeft") setIndex((n) => Math.max(0, n - 1));
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        setMediaFailed(false);
+        setIndex((n) =>
+          event.key === "ArrowRight"
+            ? Math.min(group.items.length - 1, n + 1)
+            : Math.max(0, n - 1),
+        );
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -62,12 +69,28 @@ export function StoryViewer({
           type="button"
           className="block w-full"
           onClick={() => {
-            if (index < group.items.length - 1) setIndex(index + 1);
+            if (index < group.items.length - 1) {
+              setMediaFailed(false);
+              setIndex(index + 1);
+            }
             else onClose();
           }}
         >
-          {item.type === "VIDEO" ? (
-            <video src={item.url} className="max-h-[75vh] w-full rounded-lg object-contain" autoPlay muted controlsList="nodownload" />
+          {mediaFailed ? (
+            <p className="py-16 text-center text-sm text-zinc-300">This video can’t be played. Upload it again.</p>
+          ) : item.type === "VIDEO" ? (
+            <video
+              key={item.id}
+              src={item.url}
+              className="max-h-[75vh] w-full rounded-lg object-contain"
+              muted
+              playsInline
+              controlsList="nodownload"
+              onLoadedData={(event) => {
+                void event.currentTarget.play().catch(() => setMediaFailed(true));
+              }}
+              onError={() => setMediaFailed(true)}
+            />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={item.url} alt="" className="max-h-[75vh] w-full rounded-lg object-contain" />

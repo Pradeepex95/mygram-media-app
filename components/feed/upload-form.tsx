@@ -18,38 +18,42 @@ function fileKind(file: File) {
 }
 
 async function generateVideoThumbnail(file: File): Promise<Blob | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const video = document.createElement("video");
-    video.src = url;
-    video.muted = true;
-    video.playsInline = true;
-    video.currentTime = 0.1;
-    video.onloadeddata = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 640;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
+  const url = URL.createObjectURL(file);
+  try {
+    return await new Promise((resolve) => {
+      const video = document.createElement("video");
+      let settled = false;
+      let timer = 0;
+      const finish = (blob: Blob | null) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
         URL.revokeObjectURL(url);
-        resolve(null);
-        return;
-      }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        (blob) => {
-          URL.revokeObjectURL(url);
-          resolve(blob);
-        },
-        "image/jpeg",
-        0.8,
-      );
-    };
-    video.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(null);
-    };
-  });
+        resolve(blob);
+      };
+      timer = window.setTimeout(() => finish(null), 8000);
+      video.preload = "auto";
+      video.muted = true;
+      video.playsInline = true;
+      video.src = url;
+      video.onerror = () => finish(null);
+      video.onloadeddata = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 640;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          finish(null);
+          return;
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => finish(blob), "image/jpeg", 0.8);
+      };
+    });
+  } catch {
+    URL.revokeObjectURL(url);
+    return null;
+  }
 }
 
 export function UploadForm({
@@ -83,7 +87,10 @@ export function UploadForm({
         return;
       }
       setFile(next);
-      setPreview(URL.createObjectURL(next));
+      setPreview((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return URL.createObjectURL(next);
+      });
     },
     [maxImageBytes, maxVideoBytes],
   );

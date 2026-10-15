@@ -35,6 +35,34 @@ function localRoot() {
   return path.join(process.cwd(), ".storage");
 }
 
+const SAFE_OBJECT_KEY =
+  /^(media|thumb|avatar)\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.(jpg|png|webp|mp4|mov|webm)$/;
+
+export function isSafeObjectKey(key: string): boolean {
+  return SAFE_OBJECT_KEY.test(key);
+}
+
+export function assertOwnedObjectKey(key: string, userId: string, kind?: "media" | "thumb" | "avatar") {
+  if (!isSafeObjectKey(key) || !key.includes(`/${userId}/`)) {
+    throw new Error("Invalid storage key");
+  }
+  if (kind && !key.startsWith(`${kind}/`)) {
+    throw new Error("Invalid storage key");
+  }
+}
+
+function resolveLocalPath(key: string): string {
+  if (!isSafeObjectKey(key)) {
+    throw new Error("Invalid storage key");
+  }
+  const root = path.resolve(localRoot());
+  const full = path.resolve(root, key);
+  if (full !== root && !full.startsWith(root + path.sep)) {
+    throw new Error("Invalid storage key");
+  }
+  return full;
+}
+
 export const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
@@ -202,7 +230,7 @@ export async function createPresignedViewUrl(key: string): Promise<string> {
 
 export async function deleteObject(key: string): Promise<void> {
   if (storageDriver() === "local") {
-    const full = path.join(localRoot(), key);
+    const full = resolveLocalPath(key);
     await unlink(full).catch(() => undefined);
     return;
   }
@@ -216,11 +244,11 @@ export async function deleteObject(key: string): Promise<void> {
 }
 
 export async function writeLocalObject(key: string, data: Buffer) {
-  const full = path.join(localRoot(), key);
+  const full = resolveLocalPath(key);
   await mkdir(path.dirname(full), { recursive: true });
   await writeFile(full, data);
 }
 
 export function localObjectPath(key: string) {
-  return path.join(localRoot(), key);
+  return resolveLocalPath(key);
 }

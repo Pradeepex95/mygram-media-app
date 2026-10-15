@@ -14,16 +14,23 @@ function isStaticAsset(pathname: string) {
 }
 
 function externalUrl(request: NextRequest, pathname: string) {
-  const host = (
-    request.headers.get("x-forwarded-host") ??
-    request.headers.get("host") ??
-    request.nextUrl.host
-  )
-    .split(",")[0]
-    .trim();
+  const hostHeader = request.headers.get("host")?.split(",")[0]?.trim() ?? "";
+  let appHost = "";
+  try {
+    appHost = new URL(process.env.NEXT_PUBLIC_APP_URL || "").host;
+  } catch {
+    appHost = "";
+  }
+  const allowed = new Set(
+    [request.nextUrl.host, hostHeader, appHost].filter((value) => value.length > 0),
+  );
+  const forwarded = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ?? "";
+  const host = allowed.has(forwarded) ? forwarded : hostHeader || request.nextUrl.host;
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
   const proto =
-    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
-    request.nextUrl.protocol.replace(":", "");
+    forwardedProto === "http" || forwardedProto === "https"
+      ? forwardedProto
+      : request.nextUrl.protocol.replace(":", "");
   return new URL(pathname, `${proto}://${host}`);
 }
 

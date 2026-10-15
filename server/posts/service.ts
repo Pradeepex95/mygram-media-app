@@ -370,15 +370,6 @@ export async function deletePost(params: {
     throw new Error("Forbidden");
   }
 
-  for (const media of post.media) {
-    try {
-      await deleteObject(media.storageKey);
-      if (media.thumbnailKey) await deleteObject(media.thumbnailKey);
-    } catch {
-      // Best-effort cleanup; continue deleting DB rows
-    }
-  }
-
   await prisma.$transaction(async (tx) => {
     await tx.story.deleteMany({
       where: { storageKey: { in: post.media.map((m) => m.storageKey) } },
@@ -394,6 +385,15 @@ export async function deletePost(params: {
       });
     }
   });
+
+  for (const media of post.media) {
+    try {
+      await deleteObject(media.storageKey);
+      if (media.thumbnailKey) await deleteObject(media.thumbnailKey);
+    } catch {
+      // The post is already gone. Leave orphaned objects rather than restoring a deleted post.
+    }
+  }
 }
 
 export async function deleteComment(params: {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isSafeObjectKey,
   signLocalTokenWithSecret,
   verifyLocalTokenWithSecret,
 } from "@/lib/storage";
@@ -15,6 +16,13 @@ describe("local storage tokens", () => {
       key,
       expiresAt,
     });
+  });
+
+  it("rejects object keys that leave the storage root", () => {
+    expect(isSafeObjectKey("media/user_1/photo.png")).toBe(true);
+    expect(isSafeObjectKey("media/user_1/../../etc/passwd")).toBe(false);
+    expect(isSafeObjectKey("/etc/passwd")).toBe(false);
+    expect(isSafeObjectKey("media/user_1/photo.php")).toBe(false);
   });
 
   it("rejects an expired token", () => {

@@ -25,6 +25,7 @@ export function FeedList({
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const booted = useRef(false);
+  const loadingMoreRef = useRef(false);
 
   const load = useCallback(
     async (next?: string | null) => {
@@ -58,17 +59,19 @@ export function FeedList({
 
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(async ([entry]) => {
-      if (entry.isIntersecting && cursor && !loadingMore) {
-        setLoadingMore(true);
-        await load(cursor);
+    if (!el || !cursor) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting || loadingMoreRef.current) return;
+      loadingMoreRef.current = true;
+      setLoadingMore(true);
+      void load(cursor).finally(() => {
+        loadingMoreRef.current = false;
         setLoadingMore(false);
-      }
+      });
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [cursor, load, loadingMore]);
+  }, [cursor, load]);
 
   if (loading) {
     return (

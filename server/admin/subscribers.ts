@@ -12,10 +12,17 @@ export async function createSubscriber(params: {
   password?: string;
 }) {
   let username = (params.username || generateUsername()).toLowerCase();
+  let available = false;
   for (let i = 0; i < 5; i += 1) {
     const exists = await prisma.user.findUnique({ where: { username } });
-    if (!exists) break;
+    if (!exists) {
+      available = true;
+      break;
+    }
     username = generateUsername();
+  }
+  if (!available) {
+    throw new Error("Could not allocate a username");
   }
 
   const password = params.password || generateStrongPassword();

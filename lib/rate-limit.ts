@@ -64,12 +64,20 @@ async function upstashLimit(
   };
 }
 
+function pruneExpiredBuckets(now: number) {
+  if (memoryStore.size < 1000) return;
+  for (const [key, bucket] of memoryStore) {
+    if (bucket.resetAt <= now) memoryStore.delete(key);
+  }
+}
+
 function memoryLimit(params: {
   key: string;
   limit: number;
   windowMs: number;
 }): RateLimitResult {
   const now = Date.now();
+  pruneExpiredBuckets(now);
   const existing = memoryStore.get(params.key);
 
   if (!existing || existing.resetAt <= now) {

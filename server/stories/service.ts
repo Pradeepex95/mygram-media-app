@@ -1,7 +1,7 @@
 import { MediaType, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { AuthUser } from "@/lib/auth/session";
-import { createPresignedViewUrl, isImageMime, isVideoMime } from "@/lib/storage";
+import { assertOwnedObjectKey, createPresignedViewUrl, isImageMime, isVideoMime } from "@/lib/storage";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -68,14 +68,48 @@ export async function listActiveStories(viewerId: string) {
   return { mine, others };
 }
 
+export async function listAuthorStories(authorId: string) {
+  const stories = await prisma.story.findMany({
+    where: { authorId, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "asc" },
+    include: {
+      author: { select: { id: true, username: true, avatarKey: true } },
+    },
+  });
+  const first = stories[0];
+  if (!first) return null;
+
+  const [avatarUrl, items] = await Promise.all([
+    first.author.avatarKey
+      ? createPresignedViewUrl(first.author.avatarKey)
+      : Promise.resolve(null),
+    Promise.all(
+      stories.map(async (story) => ({
+        id: story.id,
+        type: story.type,
+        url: await createPresignedViewUrl(story.storageKey),
+        createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+      })),
+    ),
+  ]);
+
+  return {
+    user: {
+      id: first.author.id,
+      username: first.author.username,
+      avatarUrl,
+    },
+    items,
+  };
+}
+
 export async function createStory(params: {
   user: AuthUser;
   storageKey: string;
   mimeType: string;
 }) {
-  if (!params.storageKey.includes(`/${params.user.id}/`)) {
-    throw new Error("Invalid storage key");
-  }
+  assertOwnedObjectKey(params.storageKey, params.user.id, "media");
   const type = isVideoMime(params.mimeType)
     ? MediaType.VIDEO
     : isImageMime(params.mimeType)
@@ -101,9 +135,7 @@ export async function updateAdminAvatar(params: {
   if (params.user.role !== Role.ADMIN) {
     throw new Error("Only the admin can change this profile photo");
   }
-  if (!params.storageKey.startsWith(`avatar/${params.user.id}/`)) {
-    throw new Error("Invalid storage key");
-  }
+  assertOwnedObjectKey(params.storageKey, params.user.id, "avatar");
   const user = await prisma.user.update({
     where: { id: params.user.id },
     data: { avatarKey: params.storageKey },

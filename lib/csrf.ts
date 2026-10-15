@@ -12,13 +12,8 @@ export function assertSameOrigin(request: Request) {
   }
 
   const appOrigin = new URL(getEnv().NEXT_PUBLIC_APP_URL).origin;
-  const requestHost = (
-    request.headers.get("x-forwarded-host") ??
-    request.headers.get("host") ??
-    ""
-  )
-    .split(",")[0]
-    ?.trim();
+  // Host is set by the browser. X-Forwarded-Host is client-settable and must not authorize a foreign Origin.
+  const requestHost = (request.headers.get("host") ?? "").split(",")[0]?.trim();
   let originHost = "";
   try {
     originHost = new URL(origin).host;

@@ -8,6 +8,21 @@ import {
   subscriptionBlockMessage,
 } from "@/lib/auth/session";
 import { rateLimit } from "@/lib/rate-limit";
+import type { AppEnv } from "@/lib/env";
+
+async function enforceFailedUsernameLimit(username: string, env: AppEnv) {
+  const userLimit = await rateLimit({
+    key: `login:user:${username}`,
+    limit: env.LOGIN_MAX_ATTEMPTS,
+    windowMs: env.LOGIN_LOCKOUT_MINUTES * 60 * 1000,
+  });
+  if (!userLimit.success) {
+    throw new AuthError(
+      "UNAUTHENTICATED",
+      `Too many failed attempts. Try again in ${env.LOGIN_LOCKOUT_MINUTES} minutes.`,
+    );
+  }
+}
 
 export async function loginWithCredentials(params: {
   username: string;
@@ -28,18 +43,6 @@ export async function loginWithCredentials(params: {
     throw new AuthError("UNAUTHENTICATED", "Too many login attempts. Try again later.");
   }
 
-  const userLimit = await rateLimit({
-    key: `login:user:${username}`,
-    limit: env.LOGIN_MAX_ATTEMPTS,
-    windowMs: env.LOGIN_LOCKOUT_MINUTES * 60 * 1000,
-  });
-  if (!userLimit.success) {
-    throw new AuthError(
-      "UNAUTHENTICATED",
-      `Too many failed attempts. Try again in ${env.LOGIN_LOCKOUT_MINUTES} minutes.`,
-    );
-  }
-
   const user = await prisma.user.findFirst({
     where: {
       OR: [{ username }, { email: username }],
@@ -55,6 +58,7 @@ export async function loginWithCredentials(params: {
         reason: "USER_NOT_FOUND",
       },
     });
+    await enforceFailedUsernameLimit(username, env);
     throw new AuthError("UNAUTHENTICATED", "Invalid username or password.");
   }
 
@@ -105,6 +109,7 @@ export async function loginWithCredentials(params: {
       return { failedLoginCount: updated.failedLoginCount, lockedUntil };
     });
 
+    await enforceFailedUsernameLimit(username, env);
     if (lockState.lockedUntil) {
       throw new AuthError(
         "UNAUTHENTICATED",

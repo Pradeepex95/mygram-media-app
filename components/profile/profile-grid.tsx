@@ -92,8 +92,10 @@ export function ProfileGrid({
         })}
       </div>
 
-      {tab === "reposts" || tab === "tagged" || visible.length === 0 ? (
+      {tab === "reposts" || tab === "tagged" || (visible.length === 0 && !(tab === "videos" && cursor)) ? (
         <Empty tab={tab} hasPosts={posts.length > 0} />
+      ) : visible.length === 0 ? (
+        <EmptyMessage title="No videos in the posts loaded so far" body="Load more to keep looking." />
       ) : (
         <div className="grid grid-cols-3 gap-px">
           {visible.map((post) => {

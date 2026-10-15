@@ -1,6 +1,7 @@
-import { existsSync } from "fs";
-import { readFile } from "fs/promises";
+import { createReadStream, existsSync, statSync } from "fs";
+import { Readable } from "stream";
 import { NextResponse } from "next/server";
+import { getEnv } from "@/lib/env";
 import {
   localObjectPath,
   verifyLocalToken,
@@ -22,8 +23,26 @@ export async function PUT(request: Request) {
   const verified = verifyLocalToken(token);
   if (!verified) return jsonError("Invalid or expired token", 403);
 
+  const maxBytes = getEnv().MAX_VIDEO_BYTES;
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return jsonError("File exceeds max size", 413);
+  }
   const buffer = Buffer.from(await request.arrayBuffer());
-  await writeLocalObject(verified.key, buffer);
+  if (buffer.byteLength > maxBytes) {
+    return jsonError("File exceeds max size", 413);
+  }
+  if (Number.isFinite(declared) && declared > buffer.byteLength) {
+    return jsonError("Upload was truncated before it finished", 400);
+  }
+  try {
+    await writeLocalObject(verified.key, buffer);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Invalid storage key") {
+      return jsonError(error.message, 400);
+    }
+    throw error;
+  }
   return NextResponse.json({ ok: true });
 }
 
@@ -37,28 +56,86 @@ export async function GET(request: Request) {
   const verified = verifyLocalToken(token);
   if (!verified) return jsonError("Invalid or expired token", 403);
 
-  const full = localObjectPath(verified.key);
+  let full: string;
+  try {
+    full = localObjectPath(verified.key);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Invalid storage key") {
+      return jsonError(error.message, 400);
+    }
+    throw error;
+  }
   if (!existsSync(full)) return jsonError("Not found", 404);
-  const data = await readFile(full);
-  const ext = verified.key.split(".").pop()?.toLowerCase();
-  const type =
-    ext === "png"
-      ? "image/png"
-      : ext === "webp"
-        ? "image/webp"
-        : ext === "mp4"
-          ? "video/mp4"
-          : ext === "webm"
-            ? "video/webm"
-            : ext === "mov"
-              ? "video/quicktime"
-              : "image/jpeg";
+  const size = statSync(full).size;
+  const type = contentTypeForKey(verified.key);
+  const range = request.headers.get("range");
+  const baseHeaders = {
+    "Content-Type": type,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, max-age=60",
+  };
 
-  return new NextResponse(data, {
+  if (!range) {
+    return new NextResponse(openFileStream(full), {
+      headers: { ...baseHeaders, "Content-Length": String(size) },
+    });
+  }
+
+  const parsed = parseByteRange(range, size);
+  if (!parsed) {
+    return new NextResponse(null, {
+      status: 416,
+      headers: { "Content-Range": `bytes */${size}` },
+    });
+  }
+
+  return new NextResponse(openFileStream(full, { start: parsed.start, end: parsed.end }), {
+    status: 206,
     headers: {
-      "Content-Type": type,
-      "Content-Length": String(data.byteLength),
-      "Cache-Control": "private, max-age=60",
+      ...baseHeaders,
+      "Content-Range": `bytes ${parsed.start}-${parsed.end}/${size}`,
+      "Content-Length": String(parsed.end - parsed.start + 1),
     },
   });
+}
+
+function openFileStream(full: string, options?: { start: number; end: number }) {
+  const node = createReadStream(full, options);
+  // A missing file emits 'error' with no listener and can crash the process.
+  node.on("error", () => node.destroy());
+  return Readable.toWeb(node) as ReadableStream;
+}
+
+function contentTypeForKey(key: string) {
+  const ext = key.split(".").pop()?.toLowerCase();
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "webm") return "video/webm";
+  if (ext === "mov") return "video/quicktime";
+  return "image/jpeg";
+}
+
+function parseByteRange(header: string, size: number): { start: number; end: number } | null {
+  const first = header.trim().split(",")[0]?.trim() ?? "";
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(first);
+  if (!match || size <= 0) return null;
+  const [, startText, endText] = match;
+  if (!startText && !endText) return null;
+
+  let start: number;
+  let end: number;
+  if (!startText) {
+    const suffix = Number(endText);
+    if (!Number.isFinite(suffix) || suffix <= 0) return null;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(startText);
+    end = endText ? Number(endText) : size - 1;
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size || end < start) {
+    return null;
+  }
+  return { start, end: Math.min(end, size - 1) };
 }

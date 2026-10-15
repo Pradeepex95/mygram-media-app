@@ -345,9 +345,11 @@ export function ProfileHeader({
                 })
               }
             >
-              <span className="block h-16 w-16 overflow-hidden rounded-full bg-zinc-800">
+              <span className="relative block h-16 w-16 overflow-hidden rounded-full bg-zinc-800">
                 {item.type === "VIDEO" ? (
-                  <video src={item.url} className="h-full w-full object-cover" muted preload="metadata" />
+                  <span className="flex h-full w-full items-center justify-center text-xs font-semibold">
+                    ▶
+                  </span>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.url} alt="" className="h-full w-full object-cover" />

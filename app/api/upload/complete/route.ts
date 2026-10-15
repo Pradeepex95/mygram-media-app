@@ -2,7 +2,7 @@ import { MediaType } from "@prisma/client";
 import { requireAuth } from "@/lib/auth/session";
 import { assertSameOrigin } from "@/lib/csrf";
 import { handleRouteError, jsonCreated, jsonError } from "@/lib/api";
-import { isImageMime, isVideoMime, validateUploadConstraints } from "@/lib/storage";
+import { assertOwnedObjectKey, isImageMime, isVideoMime, validateUploadConstraints } from "@/lib/storage";
 import { completeUploadSchema } from "@/lib/validations";
 import { canUpload, createPost } from "@/server/posts/service";
 
@@ -22,8 +22,11 @@ export async function POST(request: Request) {
         sizeBytes: item.sizeBytes,
       });
       if (!check.ok) return jsonError(check.error, 400);
-      if (!item.storageKey.includes(`/${user.id}/`) && user.role !== "ADMIN") {
-        return jsonError("Invalid storage key", 400);
+      try {
+        assertOwnedObjectKey(item.storageKey, user.id, "media");
+        if (item.thumbnailKey) assertOwnedObjectKey(item.thumbnailKey, user.id, "thumb");
+      } catch (error) {
+        return jsonError(error instanceof Error ? error.message : "Invalid storage key", 400);
       }
     }
 

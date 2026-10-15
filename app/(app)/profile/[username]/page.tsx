@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Role } from "@prisma/client";
 import { requireAuth } from "@/lib/auth/session";
 import { canUpload, getProfile } from "@/server/posts/service";
-import { listActiveStories } from "@/server/stories/service";
+import { listAuthorStories } from "@/server/stories/service";
 import { ProfileHeader } from "@/components/profile/profile-header";
 import { ProfileGrid } from "@/components/profile/profile-grid";
 import type { StoryGroup } from "@/components/feed/story-viewer";
@@ -18,13 +18,10 @@ export default async function ProfilePage({ params }: Props) {
   });
   if (!profile) notFound();
 
-  const [uploadAllowed, stories] = await Promise.all([
+  const [uploadAllowed, group] = await Promise.all([
     canUpload(user),
-    listActiveStories(user.id),
+    listAuthorStories(profile.id),
   ]);
-  const group = [stories.mine, ...stories.others].find(
-    (item) => item?.user.id === profile.id,
-  );
   const highlights: StoryGroup | null = group
     ? {
         user: {

@@ -31,6 +31,12 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The proxy buffers request bodies and silently truncates them at 10MB.
+  // A clipped MP4 has no playable samples, which surfaces as
+  // "The element has no supported sources."
+  experimental: {
+    proxyClientMaxBodySize: Number(process.env.MAX_VIDEO_BYTES) || 500 * 1024 * 1024,
+  },
   // Fully authenticated / cookie-gated app: keep routes request-dynamic.
   cacheComponents: false,
   allowedDevOrigins: ["*.trycloudflare.com"],
