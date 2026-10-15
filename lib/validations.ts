@@ -55,6 +55,10 @@ export const avatarSchema = z.object({
   storageKey: z.string().min(1),
 });
 
+export const updateProfileSchema = z.object({
+  bio: z.string().max(150),
+});
+
 export const completeUploadSchema = z.object({
   caption: z.string().max(2200).optional(),
   media: z

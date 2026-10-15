@@ -469,6 +469,7 @@ export async function getProfile(params: {
       createdAt: true,
       likeCount: true,
       commentCount: true,
+      _count: { select: { media: true } },
       media: {
         take: 1,
         orderBy: { createdAt: "asc" },
@@ -495,6 +496,7 @@ export async function getProfile(params: {
         id: post.id,
         likeCount: post.likeCount,
         commentCount: post.commentCount,
+        mediaCount: post._count.media,
         media: await Promise.all(
           post.media.map(async (m) => ({
             id: m.id,
@@ -515,4 +517,14 @@ export async function getProfile(params: {
           })
         : null,
   };
+}
+
+export async function updateOwnBio(params: { userId: string; bio: string }) {
+  const bio = sanitizeText(params.bio, 150);
+  const user = await prisma.user.update({
+    where: { id: params.userId },
+    data: { bio: bio || null },
+    select: { bio: true },
+  });
+  return user;
 }

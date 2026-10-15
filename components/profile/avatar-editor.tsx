@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export function AvatarEditor({
@@ -59,30 +60,39 @@ export function AvatarEditor({
     }
   }
 
-  return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="h-24 w-24 overflow-hidden rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-[3px]">
+  const photo = (
+    <span className="relative block h-[86px] w-[86px] shrink-0">
+      <span className="block h-full w-full overflow-hidden rounded-full bg-zinc-800">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" className="h-full w-full rounded-full object-cover" />
+          <img src={url} alt="" className="h-full w-full object-cover" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center rounded-full bg-zinc-900 text-3xl font-semibold text-white">
+          <span className="flex h-full w-full items-center justify-center text-3xl font-semibold text-white">
             {username.slice(0, 1).toUpperCase()}
           </span>
         )}
-      </div>
+      </span>
       {canEdit && (
-        <label className="cursor-pointer text-sm font-semibold text-sky-500">
-          {busy ? "Uploading..." : "Change profile photo"}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            disabled={busy}
-            onChange={(event) => void onFile(event.target.files?.[0])}
-          />
-        </label>
+        <span className="absolute right-0 bottom-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-black bg-sky-500 md:border-white md:dark:border-black">
+          <Plus className="h-3.5 w-3.5 text-white" />
+        </span>
       )}
-    </div>
+    </span>
+  );
+
+  if (!canEdit) return photo;
+
+  return (
+    <label className={`cursor-pointer ${busy ? "opacity-60" : ""}`}>
+      {photo}
+      <span className="sr-only">{busy ? "Uploading profile photo" : "Change profile photo"}</span>
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        disabled={busy}
+        onChange={(event) => void onFile(event.target.files?.[0])}
+      />
+    </label>
   );
 }

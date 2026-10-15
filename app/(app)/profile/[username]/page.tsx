@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { Role } from "@prisma/client";
 import { requireAuth } from "@/lib/auth/session";
-import { getProfile } from "@/server/posts/service";
-import { AvatarEditor } from "@/components/profile/avatar-editor";
+import { canUpload, getProfile } from "@/server/posts/service";
+import { listActiveStories } from "@/server/stories/service";
+import { ProfileHeader } from "@/components/profile/profile-header";
 import { ProfileGrid } from "@/components/profile/profile-grid";
-import { Card } from "@/components/ui/card";
+import type { StoryGroup } from "@/components/feed/story-viewer";
 
 type Props = { params: Promise<{ username: string }> };
 
@@ -17,23 +18,43 @@ export default async function ProfilePage({ params }: Props) {
   });
   if (!profile) notFound();
 
-  return (
-    <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center gap-4">
-          <AvatarEditor
-            username={profile.username}
-            avatarUrl={profile.avatarUrl}
-            canEdit={user.role === Role.ADMIN && user.id === profile.id}
-          />
-          <div>
-            <h1 className="text-2xl font-bold">{profile.username}</h1>
-            <p className="text-sm text-zinc-500">{profile.postCount} posts</p>
-            {profile.bio && <p className="mt-2 text-sm">{profile.bio}</p>}
-          </div>
-        </div>
-      </Card>
+  const [uploadAllowed, stories] = await Promise.all([
+    canUpload(user),
+    listActiveStories(user.id),
+  ]);
+  const group = [stories.mine, ...stories.others].find(
+    (item) => item?.user.id === profile.id,
+  );
+  const highlights: StoryGroup | null = group
+    ? {
+        user: {
+          id: group.user.id,
+          username: group.user.username,
+          avatarUrl: group.user.avatarUrl,
+        },
+        items: group.items.map((item) => ({
+          id: item.id,
+          type: item.type,
+          url: item.url,
+          createdAt: item.createdAt.toISOString(),
+          expiresAt: item.expiresAt.toISOString(),
+        })),
+      }
+    : null;
 
+  return (
+    <div className="md:overflow-hidden md:rounded-xl md:border md:border-zinc-200 md:dark:border-zinc-800">
+      <ProfileHeader
+        username={profile.username}
+        viewerUsername={user.username}
+        bio={profile.bio}
+        avatarUrl={profile.avatarUrl}
+        postCount={profile.postCount}
+        isOwn={user.id === profile.id}
+        canEditAvatar={user.role === Role.ADMIN && user.id === profile.id}
+        canUpload={uploadAllowed && user.id === profile.id}
+        highlights={highlights}
+      />
       <ProfileGrid
         username={profile.username}
         initialPosts={profile.posts}

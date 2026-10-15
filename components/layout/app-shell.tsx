@@ -34,7 +34,7 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
 
   const nav = [
     { href: "/feed", label: "Home", icon: Home },
@@ -91,9 +91,10 @@ export function AppShell({
           <Button
             variant="ghost"
             className="w-full justify-start"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
           >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <Sun className="hidden h-4 w-4 dark:block" />
+            <Moon className="h-4 w-4 dark:hidden" />
             Toggle theme
           </Button>
           <Button variant="ghost" className="w-full justify-start" onClick={logout}>
